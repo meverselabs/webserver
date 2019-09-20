@@ -173,22 +173,31 @@ func (web *WebServer) UpdateRender() error {
 	return nil
 }
 
+func (web *WebServer) findNearTp(start, prefix, tpName string) []byte {
+	var tpData []byte
+	var err error
+	pfs := strings.Split(strings.Trim(prefix, "/"), "/")
+	for i := len(pfs); i >= 0; i-- {
+		tpData, err = web.assetToData(start + strings.Join(pfs[:i], "/") + "/" + tpName + ".html")
+		if err == nil {
+			log.Println("find", start+strings.Join(pfs[:i], "/")+"/"+tpName+".html")
+			return tpData
+		}
+	}
+
+	return nil
+}
+
 func (web *WebServer) loadTemplates(start, prefix string, layout http.File, templateMap map[string][][]byte) [][]byte {
 	tds := [][]byte{}
 
-	layoutData, err := web.assetToData(start + prefix + "layout.html")
-	if err != nil {
-		layoutData, err = web.assetToData(start + "/layout.html")
+	tpData := web.findNearTp(start, prefix, "layout")
+	if tpData != nil {
+		tds = append(tds, tpData)
 	}
-	if layoutData != nil {
-		tds = append(tds, layoutData)
-	}
-	baseData, err := web.assetToData(start + prefix + "base.html")
-	if err != nil {
-		baseData, err = web.assetToData(start + "/base.html")
-	}
-	if baseData != nil {
-		tds = append(tds, baseData)
+	tpData = web.findNearTp(start, prefix, "base")
+	if tpData != nil {
+		tds = append(tds, tpData)
 	}
 
 	f, err := layout.Readdir(1)
@@ -220,7 +229,7 @@ func (web *WebServer) loadTemplates(start, prefix string, layout http.File, temp
 	return tds
 }
 
-func (web *WebServer) updateRender(prefix, path string, templateMaps ...map[string][][]byte) error {
+func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[string][][]byte, moduleTemplateMap map[string][][]byte) error {
 	d, err := web.assets.Open(path)
 	if err != nil {
 		log.Fatal(err)
@@ -229,7 +238,7 @@ func (web *WebServer) updateRender(prefix, path string, templateMaps ...map[stri
 	fi, err = d.Readdir(1)
 	for err == nil {
 		if fi[0].IsDir() {
-			web.updateRender(prefix+fi[0].Name()+"/", "/view/"+prefix+fi[0].Name(), templateMaps...)
+			web.updateRender(prefix+fi[0].Name()+"/", "/view/"+prefix+fi[0].Name(), viewTemplateMap, moduleTemplateMap)
 		} else {
 			data, err := web.assetToData(path + "/" + fi[0].Name())
 			if err != nil {
@@ -242,24 +251,36 @@ func (web *WebServer) updateRender(prefix, path string, templateMaps ...map[stri
 
 			// template.Must(t.Parse(string(data)))
 			t.Parse(string(data))
-			for _, tm := range templateMaps {
-				paths := strings.Split(strings.Trim(prefix, "/"), "/")
-				useRoot := true
-				for i, _ := range paths {
-					k := strings.Join(paths[:i+1], "/") + "/"
-					if tds, has := tm[k]; has {
-						useRoot = false
-						for _, td := range tds {
-							t.Parse(string(td))
-						}
-					}
+			paths := strings.Split(strings.Trim(prefix, "/"), "/")
+			for i, _ := range paths {
+				var k string
+				if i == len(paths)-i {
+					k = ""
+				} else {
+					k = strings.Join(paths[:len(paths)-i], "/") + "/"
 				}
-				if useRoot {
-					for _, td := range tm[""] {
+				if tds, has := viewTemplateMap[k]; has {
+					for _, td := range tds {
+						t.Parse(string(td))
+					}
+					break
+				}
+			}
+			for i := 0; i <= len(paths); i++ {
+				var k string
+				if i == 0 {
+					k = ""
+				} else {
+					k = strings.Join(paths[:i], "/") + "/"
+				}
+				log.Println("prefix", prefix+fi[0].Name())
+				if tds, has := moduleTemplateMap[k]; has {
+					for _, td := range tds {
 						t.Parse(string(td))
 					}
 				}
 			}
+
 			web.templates[prefix+fi[0].Name()] = t
 		}
 
