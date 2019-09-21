@@ -17,7 +17,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/fsnotify/fsnotify"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo"
 )
 
 type WebServer struct {
@@ -254,7 +254,7 @@ func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[stri
 			paths := strings.Split(strings.Trim(prefix, "/"), "/")
 			for i, _ := range paths {
 				var k string
-				if i == len(paths)-i {
+				if i == len(paths)-1 {
 					k = ""
 				} else {
 					k = strings.Join(paths[:len(paths)-i], "/") + "/"
