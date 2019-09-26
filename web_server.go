@@ -180,7 +180,7 @@ func (web *WebServer) findNearTp(start, prefix, tpName string) []byte {
 	for i := len(pfs); i >= 0; i-- {
 		tpData, err = web.assetToData(start + strings.Join(pfs[:i], "/") + "/" + tpName + ".html")
 		if err == nil {
-			//log.Println("find", start+strings.Join(pfs[:i], "/")+"/"+tpName+".html")
+			// log.Println("find", start+strings.Join(pfs[:i], "/")+"/"+tpName+".html")
 			return tpData
 		}
 	}
@@ -253,11 +253,9 @@ func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[stri
 			t.Parse(string(data))
 			paths := strings.Split(strings.Trim(prefix, "/"), "/")
 			for i, _ := range paths {
-				var k string
-				if i == len(paths)-1 {
-					k = ""
-				} else {
-					k = strings.Join(paths[:len(paths)-i], "/") + "/"
+				k := strings.Join(paths[:len(paths)-i], "/")
+				if k != "" {
+					k += "/"
 				}
 				if tds, has := viewTemplateMap[k]; has {
 					for _, td := range tds {
