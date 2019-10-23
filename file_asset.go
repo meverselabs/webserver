@@ -6,21 +6,21 @@ import (
 	"os"
 )
 
-type fileAsset struct {
+type FileAsset struct {
 	fs          http.FileSystem
 	extraAssets []http.FileSystem
 	path        string
 }
 
-func NewFileAsset(asset http.FileSystem, path string) *fileAsset {
-	return &fileAsset{
+func NewFileAsset(asset http.FileSystem, path string) *FileAsset {
+	return &FileAsset{
 		fs:          asset,
 		extraAssets: []http.FileSystem{},
 		path:        path,
 	}
 }
 
-func (fa *fileAsset) checkDir(path string, f http.File, err error) (http.File, error) {
+func (fa *FileAsset) checkDir(path string, f http.File, err error) (http.File, error) {
 	if err != nil {
 		return f, err
 	}
@@ -53,7 +53,7 @@ func (fa *fileAsset) checkDir(path string, f http.File, err error) (http.File, e
 // The methods should behave the same as those on an *os.File.
 type File struct {
 	http.File
-	fa     *fileAsset
+	fa     *FileAsset
 	path   string
 	readed map[string]struct{}
 
@@ -158,7 +158,7 @@ func (f *File) Stat() (os.FileInfo, error) {
 	return f.File.Stat()
 }
 
-func (fa *fileAsset) Open(path string) (http.File, error) {
+func (fa *FileAsset) Open(path string) (http.File, error) {
 	asset := http.Dir(fa.path)
 	f, err := asset.Open(path)
 	if err == nil {
@@ -176,6 +176,6 @@ func (fa *fileAsset) Open(path string) (http.File, error) {
 	return fa.checkDir(path, f, err)
 }
 
-func (fa *fileAsset) AddAssets(asset http.FileSystem) {
+func (fa *FileAsset) AddAssets(asset http.FileSystem) {
 	fa.extraAssets = append(fa.extraAssets, asset)
 }

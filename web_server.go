@@ -25,7 +25,7 @@ type WebServer struct {
 	path        string
 	funcMap     template.FuncMap
 	templates   map[string]*template.Template
-	assets      *fileAsset
+	assets      http.FileSystem
 	OnChangeDir func()
 	sync.Mutex
 
@@ -35,7 +35,7 @@ type WebServer struct {
 
 var watcher *fsnotify.Watcher
 
-func NewWebServer(assets *fileAsset, path string, OnChangeDir func()) *WebServer {
+func NewWebServer(assets http.FileSystem, path string, OnChangeDir func()) *WebServer {
 	if OnChangeDir == nil {
 		OnChangeDir = func() {}
 	}
