@@ -116,7 +116,7 @@ func (f *File) Readdir(count int) ([]os.FileInfo, error) {
 		return nil, err
 	}
 
-	if len(fis) == 0 {
+	if len(fis) == 0 || count < 0 {
 		return nil, io.EOF
 	} else if len(fis) > count {
 		return fis[:count], nil
