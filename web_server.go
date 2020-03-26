@@ -25,7 +25,7 @@ type WebServer struct {
 	path        string
 	funcMap     template.FuncMap
 	templates   map[string]*template.Template
-	assets      *fileAsset
+	assets      http.FileSystem
 	OnChangeDir func()
 	sync.Mutex
 
@@ -37,7 +37,10 @@ type WebServer struct {
 
 var watcher *fsnotify.Watcher
 
-func NewWebServer(assets *fileAsset, path string, OnChangeDir func()) *WebServer {
+func NewWebServer(assets http.FileSystem, path string, OnChangeDir func()) *WebServer {
+	if OnChangeDir == nil {
+		OnChangeDir = func() {}
+	}
 	web := &WebServer{
 		Echo:        echo.New(),
 		path:        path,
@@ -55,9 +58,8 @@ func NewWebServer(assets *fileAsset, path string, OnChangeDir func()) *WebServer
 		if err != nil {
 			log.Fatalln(err)
 		}
-
 		NewFileWatcher(WebPath, func(ev string, path string) {
-			if strings.HasPrefix(filepath.Ext(path), ".htm") {
+			if strings.HasPrefix(filepath.Ext(path), ".htm") || strings.HasPrefix(filepath.Ext(path), ".json") {
 				web.isRequireReload = true
 			}
 		})
@@ -74,7 +76,18 @@ func (web *WebServer) AddTemplateFuncMap(name string, f func(v interface{}) stri
 }
 
 func (web *WebServer) addDefaultTemplateFuncMap() {
-	web.AddTemplateFuncMap("insertComma", func(val interface{}) string {
+	web.AddTemplateFuncMap("insertComma", insertComma(0))
+	web.AddTemplateFuncMap("insertComma0digit", insertComma(-1))
+	web.AddTemplateFuncMap("insertComma3digit", insertComma(3))
+	web.AddTemplateFuncMap("marshal", func(v interface{}) string {
+		a, _ := json.Marshal(v)
+		return string(a)
+	})
+
+}
+
+func insertComma(Digit int) func(val interface{}) string {
+	return func(val interface{}) string {
 		src, ok := val.(string)
 		if !ok {
 			fval, ok := val.(float64)
@@ -83,6 +96,9 @@ func (web *WebServer) addDefaultTemplateFuncMap() {
 			} else {
 				return fmt.Sprintf("%f", fval)
 			}
+		}
+		if src == "" {
+			return src
 		}
 		strs := strings.Split(src, ".")
 		n := new(big.Int)
@@ -94,15 +110,17 @@ func (web *WebServer) addDefaultTemplateFuncMap() {
 		result := humanize.BigComma(n)
 
 		if len(strs) > 1 {
-			result += "." + strs[1]
+			if Digit > 0 {
+				if len(strs[1]) > Digit {
+					strs[1] = strs[1][:Digit]
+				}
+			}
+			if Digit >= 0 {
+				result += "." + strs[1]
+			}
 		}
 		return result
-	})
-	web.AddTemplateFuncMap("marshal", func(v interface{}) string {
-		a, _ := json.Marshal(v)
-		return string(a)
-	})
-
+	}
 }
 
 func (web *WebServer) CheckWatch() {
