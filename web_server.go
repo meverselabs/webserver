@@ -29,6 +29,8 @@ type WebServer struct {
 	OnChangeDir func()
 	sync.Mutex
 
+	layoutNames []string
+
 	hasWatch        bool
 	isRequireReload bool
 }
@@ -36,9 +38,6 @@ type WebServer struct {
 var watcher *fsnotify.Watcher
 
 func NewWebServer(assets *fileAsset, path string, OnChangeDir func()) *WebServer {
-	if OnChangeDir == nil {
-		OnChangeDir = func() {}
-	}
 	web := &WebServer{
 		Echo:        echo.New(),
 		path:        path,
@@ -46,6 +45,7 @@ func NewWebServer(assets *fileAsset, path string, OnChangeDir func()) *WebServer
 		assets:      assets,
 		OnChangeDir: OnChangeDir,
 		funcMap:     template.FuncMap{},
+		layoutNames: []string{"layout", "base"},
 	}
 
 	web.addDefaultTemplateFuncMap()
@@ -135,7 +135,9 @@ func (web *WebServer) assetToData(path string) ([]byte, error) {
 }
 
 func (web *WebServer) UpdateRender() error {
-	web.OnChangeDir()
+	if web.OnChangeDir != nil {
+		web.OnChangeDir()
+	}
 
 	web.templates = map[string]*template.Template{}
 
@@ -191,39 +193,42 @@ func (web *WebServer) findNearTp(start, prefix, tpName string) []byte {
 func (web *WebServer) loadTemplates(start, prefix string, layout http.File, templateMap map[string][][]byte) [][]byte {
 	tds := [][]byte{}
 
-	tpData := web.findNearTp(start, prefix, "layout")
-	if tpData != nil {
-		tds = append(tds, tpData)
-	}
-	tpData = web.findNearTp(start, prefix, "base")
-	if tpData != nil {
-		tds = append(tds, tpData)
+	for _, name := range web.layoutNames {
+		tpData := web.findNearTp(start, prefix, name)
+		if tpData != nil {
+			tds = append(tds, tpData)
+		}
 	}
 
 	f, err := layout.Readdir(1)
 	for err == nil && len(f) > 0 {
-		if f[0].IsDir() {
-			pf := prefix + f[0].Name() + "/"
-			l, err := web.assets.Open(start + pf)
-			if err == nil {
-				tds := web.loadTemplates(start, pf, l, templateMap)
-				templateMap[pf] = tds
-			} else {
-				log.Println(err)
+		func() {
+			defer func() {
+				f, err = layout.Readdir(1)
+			}()
+			if f[0].IsDir() {
+				pf := prefix + f[0].Name() + "/"
+				l, err := web.assets.Open(start + pf)
+				if err == nil {
+					tds := web.loadTemplates(start, pf, l, templateMap)
+					templateMap[pf] = tds
+				} else {
+					log.Println(err)
+				}
+				return
 			}
-			f, err = layout.Readdir(1)
-			continue
-		}
-		if f[0].Name() == "layout.html" || f[0].Name() == "base.html" {
-			f, err = layout.Readdir(1)
-			continue
-		}
-		data, err := web.assetToData(start + prefix + f[0].Name())
-		if err != nil {
-			log.Fatal(err)
-		}
-		tds = append(tds, data)
-		f, err = layout.Readdir(1)
+
+			for _, name := range web.layoutNames {
+				if f[0].Name() == name+".html" {
+					return
+				}
+			}
+			data, err := web.assetToData(start + prefix + f[0].Name())
+			if err != nil {
+				log.Fatal(err)
+			}
+			tds = append(tds, data)
+		}()
 	}
 
 	return tds
@@ -237,15 +242,16 @@ func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[stri
 	var fi []os.FileInfo
 	fi, err = d.Readdir(1)
 	for err == nil {
+		fileName := fi[0].Name()
 		if fi[0].IsDir() {
-			web.updateRender(prefix+fi[0].Name()+"/", "/view/"+prefix+fi[0].Name(), viewTemplateMap, moduleTemplateMap)
+			web.updateRender(prefix+fileName+"/", "/view/"+prefix+fileName, viewTemplateMap, moduleTemplateMap)
 		} else {
-			data, err := web.assetToData(path + "/" + fi[0].Name())
+			data, err := web.assetToData(path + "/" + fileName)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			t := template.New(fi[0].Name()).
+			t := template.New(fileName).
 				Delims("<%", "%>").
 				Funcs(web.funcMap)
 
@@ -271,7 +277,7 @@ func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[stri
 				} else {
 					k = strings.Join(paths[:i], "/") + "/"
 				}
-				//log.Println("prefix", prefix+fi[0].Name())
+				//log.Println("prefix", prefix+fileName)
 				if tds, has := moduleTemplateMap[k]; has {
 					for _, td := range tds {
 						t.Parse(string(td))
@@ -279,7 +285,7 @@ func (web *WebServer) updateRender(prefix, path string, viewTemplateMap map[stri
 				}
 			}
 
-			web.templates[prefix+fi[0].Name()] = t
+			web.templates[prefix+fileName] = t
 		}
 
 		fi, err = d.Readdir(1)
